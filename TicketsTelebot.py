@@ -29,12 +29,12 @@ title, desc = page_query.fetchone()
 
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
-    bot.reply_to(message, 'Добро пожаловать. Я телеграм бот для бронирования билетов навыступления в театре. Используйте /show, чтобы показать список доступных выступлений.')
+    bot.reply_to(message, 'Добро пожаловать. Я телеграм бот для бронирования билетов на выступления в театре. Используйте /show, чтобы показать список доступных выступлений.')
 
 @bot.message_handler(commands=['show'])
 def show_perfs(message):
-    msg = f"Название: *{title}*\nОписание: *{description}*"
-    bot.send_photo(message.chat.id, caption = msg, reply_markup=buttons)
+    msg = f"Название: *{title}*\nОписание: *{desc}*"
+    bot.send_message(message.chat.id, caption = msg, reply_markup=buttons)
 
 @bot.callback_query_handler(func=lambda c: True)
 def callback(c):
