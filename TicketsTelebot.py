@@ -16,6 +16,22 @@ print(info)
 
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
+    connect = sqlite3.connect("data.db")
+    cursor = connect.cursor()
+
+    user = message.from_user.username
+
+
+    res = cursor.execute('SELECT COUNT(*) FROM Users WHERE username = ?', [user])
+    res = res.fetchone()
+
+    if res[0] == 0:
+        cursor.execute('INSERT INTO Users (username) VALUES (?)', [user])
+        connect.commit()
+    else:
+        pass
+    connect.close()
+    
     bot.reply_to(message, f'Добро пожаловать, {message.from_user.first_name}. Я телеграм бот для бронирования билетов на выступления в театре. Используйте /show, чтобы показать список доступных выступлений.')
 
 @bot.message_handler(commands=['show'])
@@ -85,6 +101,7 @@ def specify_perf(message, id = 1, rp = -1, prev_msg = None):
             else:
                 buttons.add(types.InlineKeyboardButton('Занято', callback_data='_'))
         buttons.add(types.InlineKeyboardButton('←', callback_data=f'backr {id}'))
+        
 
 
         
@@ -115,15 +132,57 @@ def verify(message, r, p, id):
     buttons.add(types.InlineKeyboardButton('Да', callback_data=f'Yes {r} {p} {id}'), types.InlineKeyboardButton('Нет', callback_data='No'))
     bot.send_message(message.chat.id, f'Вы уверены, что хотите забронировать {p+1} место в {r+1} ряду?', reply_markup=buttons)
     
+   
 def booking(message, r, p, id):
-    tnum = None
-    bot.send_message(message.chat.id, 'Укажите номер вашего телефона')
-    if tnum == None:
-        @bot.message_handler(regexp='^\\+?[1-9][0-9]{7,14}$')
-        def book(message):
-            bot.send_message(message.chat.id, 'Бронирование успешно. Мы отправим вам напоминание в день выступления')
-            tnum = message.text
-    print(tnum)
+    connect = sqlite3.connect("data.db")
+    cursor = connect.cursor()
+
+    idcue = cursor.execute('SELECT id FROM Users WHERE username = ?', [message.chat.username])
+    userid = idcue.fetchone()[0]
+    pccue = cursor.execute('SELECT place_config FROM Performance WHERE id = ?', [id])
+    pc = pccue.fetchone()[0]
+
+    data = [userid, id, r, p]
+
+    cursor.execute('INSERT INTO Book (user, perf, row, place) VALUES(?, ?, ?, ?)', data)
+    connect.commit()
+
+    hallcue = cursor.execute(f'SELECT * FROM Hall WHERE id = {pc}')
+    hall = hallcue.fetchone()
+    row = list(hall)[r+1]
+    row = list(row)
+    row[p] = '1'
+    row = ''.join(row)
+
+    rown = 'row' + str(r+1)
+
+    print(rown)
+    print(row)
+
+    cursor.execute(f'UPDATE Hall SET {rown} = {row} WHERE id = {pc}')
+    connect.commit()
+
+    perf = cursor.execute(f"SELECT title, det_desc, date FROM Performance WHERE place_config!=-1 AND id = {id}")
+    title, desc, date_time = perf.fetchone()
+
+    date = date_time.split(' ')[0]
+    time = date_time.split(' ')[1]
+
+    msg  = f"Название: {title}\n"
+    msg += f"Дата выступления: {date.split('-')[2]}.{date.split('-')[1]}.{date.split('-')[0]} Местное время: {time.split(':')[0]}:{time.split(':')[1]}\n"
+
+    try: bot.delete_message(message.chat.id, message.id)
+    except: pass
+    
+    bot.send_message(message.chat.id, f'Вы успешно забронировали {p+1} место в {r+1} ряду.\n{msg}')
+
+    
+
+    
+    
+
+
+            
     
         
 
@@ -150,16 +209,18 @@ def callback(c):
         p = int(c.data.split(' ')[2])
         id = int(c.data.split(' ')[3])
         verify(c.message, r, p, id)
+        try: bot.delete_message(c.message.chat.id, c.message.id)
+        except: pass
     elif c.data == 'No':
         try: bot.delete_message(c.message.chat.id, c.message.id)
         except: pass
     elif 'Yes' in c.data:
+        try: bot.delete_message(c.message.chat.id, c.message.id)
+        except: pass
         r = int(c.data.split(' ')[1])
         p = int(c.data.split(' ')[2])
         id = int(c.data.split(' ')[3])
         booking(c.message, r, p, id)
-        try: bot.delete_message(c.message.chat.id, c.message.id)
-        except: pass
         
         
         
