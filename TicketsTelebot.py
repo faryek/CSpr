@@ -2,8 +2,11 @@ import telebot
 import os
 from dotenv import load_dotenv
 from telebot import types
+from telebot.types import InputFile
 import sqlite3
 import re
+import qrcode
+
 
 load_dotenv()
 
@@ -16,23 +19,27 @@ print(info)
 
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
+    if message.from_user.is_bot:
+        bot.send_message(message.chat.id, 'Наши услуги не предназначены для ботов')
+        return -1
     connect = sqlite3.connect("data.db")
     cursor = connect.cursor()
 
-    user = message.from_user.username
+    user = [message.from_user.username, message.from_user.id, message.from_user.first_name]
 
 
-    res = cursor.execute('SELECT COUNT(*) FROM Users WHERE username = ?', [user])
+    res = cursor.execute('SELECT COUNT(*) FROM Users WHERE user_id = ?', [user[1]])
     res = res.fetchone()
 
+
     if res[0] == 0:
-        cursor.execute('INSERT INTO Users (username) VALUES (?)', [user])
+        cursor.execute('INSERT INTO Users (username, user_id, name) VALUES (?, ?, ?)', user)
         connect.commit()
     else:
         pass
     connect.close()
     
-    bot.reply_to(message, f'Добро пожаловать, {message.from_user.first_name}. Я телеграм бот для бронирования билетов на выступления в театре. Используйте /show, чтобы показать список доступных выступлений.')
+    bot.reply_to(message, f'Добро пожаловать, {message.from_user.first_name}. Я телеграм бот для бронирования билетов на выступления в драматическом театре Верхнего Букатино. Используйте /show, чтобы показать список доступных выступлений.')
 
 @bot.message_handler(commands=['show'])
 def show_perfs(message, id = 1, prev_msg = None):
@@ -137,12 +144,12 @@ def booking(message, r, p, id):
     connect = sqlite3.connect("data.db")
     cursor = connect.cursor()
 
-    idcue = cursor.execute('SELECT id FROM Users WHERE username = ?', [message.chat.username])
+    idcue = cursor.execute('SELECT id FROM Users WHERE user_id = ?', [message.chat.id])
     userid = idcue.fetchone()[0]
     pccue = cursor.execute('SELECT place_config FROM Performance WHERE id = ?', [id])
     pc = pccue.fetchone()[0]
 
-    data = [userid, id, r, p]
+    data = [userid, id, r+1, p+1]
 
     cursor.execute('INSERT INTO Book (user, perf, row, place) VALUES(?, ?, ?, ?)', data)
     connect.commit()
@@ -159,7 +166,7 @@ def booking(message, r, p, id):
     print(rown)
     print(row)
 
-    cursor.execute(f'UPDATE Hall SET {rown} = {row} WHERE id = {pc}')
+    cursor.execute(f'UPDATE Hall SET {rown} = ? WHERE id = {pc}', [row])
     connect.commit()
 
     perf = cursor.execute(f"SELECT title, det_desc, date FROM Performance WHERE place_config!=-1 AND id = {id}")
@@ -174,15 +181,19 @@ def booking(message, r, p, id):
     try: bot.delete_message(message.chat.id, message.id)
     except: pass
     
-    bot.send_message(message.chat.id, f'Вы успешно забронировали {p+1} место в {r+1} ряду.\n{msg}')
-
+    img = qrcode.make(f'{message.chat.id}')
+    img.save(f'code{message.chat.id}.png')
     
+    bot.send_message(message.chat.id, f'Вы успешно забронировали {p+1} место в {r+1} ряду.\n{msg}Покажите qr-код на кассе или используйте своё имя/никнейм из telegram.\n')
+    bot.send_photo(message.chat.id, InputFile(f'C:\\Users\\ermak\\OneDrive\\Рабочий стол\\Tomb\\Projects\\CSpr\\code{message.chat.id}.png'))
 
-    
-    
+    file = f'code{message.chat.id}.png'  
+    location = "C:\\Users\\ermak\\OneDrive\\Рабочий стол\\Tomb\\Projects\\CSpr"
+    path = os.path.join(location, file)  
 
-
-            
+    try: os.remove(path)
+    except: pass
+  
     
         
 
@@ -221,20 +232,9 @@ def callback(c):
         p = int(c.data.split(' ')[2])
         id = int(c.data.split(' ')[3])
         booking(c.message, r, p, id)
-        
-        
-        
-        
-
-
-
-
-
-
-
-
-
 
 
 
 bot.infinity_polling()
+
+
